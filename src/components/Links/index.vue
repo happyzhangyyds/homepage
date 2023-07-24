@@ -51,8 +51,8 @@ import { Icon } from "@vicons/utils";
 import {
   Link,
   Blog,
-  CompactDisc,
-  Cloud,
+  Seedling,
+  HatCowboy,
   Compass,
   Book,
   Fire,
@@ -79,9 +79,9 @@ const siteLinksList = computed(() => {
 
 // 网站链接图标
 const siteIcon = {
+  Seedling,
   Blog,
-  Cloud,
-  CompactDisc,
+  HatCowboy,
   Compass,
   Book,
   Fire,

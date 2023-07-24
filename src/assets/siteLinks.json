@@ -3,5 +3,18 @@
     "icon": "Blog",
     "name": "博客",
     "link": "https://matrixcore.top/"
+  },
+
+  {
+    "icon": "Seedling",
+    "name": "研数--高数基础",
+    "link": "https://matrixcore.top/c6e456c36a9448f19f54b56a1116400e"
+  },
+
+  {
+    "icon": "HatCowboy",
+    "name": "研英--阅读理解",
+    "link": "https://matrixcore.top/fca04e3f533947e4b840e0545e8e2f7e"
   }
+  
 ]
