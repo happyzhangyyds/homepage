@@ -46,7 +46,7 @@ export const getPlayerList = async (server, type, id) => {
 
 // 获取一言数据
 export const getHitokoto = async () => {
-  const res = await fetch("https://matrixcore.top/hitokoto");
+  const res = await fetch("https://v1.hitokoto.cn/?c=i&c=k");
   return await res.json();
 };
 
