@@ -1,76 +1,67 @@
-// import axios from "axios";
-import fetchJsonp from "fetch-jsonp";
+const AMAP_API_BASE_URL = "https://restapi.amap.com/v3";
+const REQUEST_TIMEOUT = 8000;
+const DEFAULT_LOCATION = { city: "广州黄埔", adcode: "440112" };
 
-/**
- * 音乐播放器
- */
+const request = async (path, params) => {
+  const controller = new AbortController();
+  const timeoutId = window.setTimeout(() => controller.abort(), REQUEST_TIMEOUT);
 
-// 获取音乐播放列表
-export const getPlayerList = async (server, type, id) => {
-  const res = await fetch(
-    `${import.meta.env.VITE_SONG_API}?server=${server}&type=${type}&id=${id}`
-  );
-  const data = await res.json();
-
-  if (data[0].url.startsWith("@")) {
-    const [handle, jsonpCallback, jsonpCallbackFunction, url] = data[0].url
-      .split("@")
-      .slice(1);
-    const jsonpData = await fetchJsonp(url).then((res) => res.json());
-    const domain = (
-      jsonpData.req_0.data.sip.find((i) => !i.startsWith("http://ws")) ||
-      jsonpData.req_0.data.sip[0]
-    ).replace("http://", "https://");
-
-    return data.map((v, i) => ({
-      title: v.name || v.title,
-      artist: v.artist || v.author,
-      src: domain + jsonpData.req_0.data.midurlinfo[i].purl,
-      pic: v.pic,
-      lrc: v.lrc,
-    }));
-  } else {
-    return data.map((v) => ({
-      title: v.name || v.title,
-      artist: v.artist || v.author,
-      src: v.url,
-      pic: v.pic,
-      lrc: v.lrc,
-    }));
+  try {
+    const response = await fetch(
+      `${AMAP_API_BASE_URL}${path}?${new URLSearchParams(params)}`,
+      { signal: controller.signal }
+    );
+    if (!response.ok) throw new Error(`天气服务请求失败（HTTP ${response.status}）`);
+    const data = await response.json();
+    if (data.status !== "1") throw new Error(data.info || "天气服务返回异常");
+    return data;
+  } finally {
+    window.clearTimeout(timeoutId);
   }
 };
 
-/**
- * 一言
- */
+const getLocationByCoordinates = async (key, coordinates) => {
+  const { latitude, longitude } = coordinates || {};
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) return null;
 
-// 获取一言数据
-export const getHitokoto = async () => {
-  const res = await fetch("https://v1.hitokoto.cn/?c=i");
-  return await res.json();
+  const data = await request("/geocode/regeo", {
+    key,
+    location: `${longitude},${latitude}`,
+    extensions: "base",
+  });
+  const address = data.regeocode?.addressComponent;
+  if (!address?.adcode) return null;
+
+  // 直辖市的 city 字段可能为空，依次使用区、城市、省份作为展示名称。
+  const city = Array.isArray(address.city) ? address.city[0] : address.city;
+  return {
+    city: city || address.district || address.province,
+    adcode: address.adcode,
+  };
 };
 
-/**
- * 天气
- */
+export const getCurrentWeather = async (key, coordinates) => {
+  if (!key) throw new Error("天气服务尚未配置");
 
-// 获取高德地理位置信息
-export const getAdcode = async (key) => {
-  const res = await fetch(`https://restapi.amap.com/v3/ip?key=${key}`);
-  return await res.json();
-};
+  let location = DEFAULT_LOCATION;
+  try {
+    const preciseLocation = await getLocationByCoordinates(key, coordinates);
+    if (preciseLocation?.city) location = preciseLocation;
+  } catch {
+    // 浏览器定位反查不可用时，继续尝试 IP 定位。
+  }
 
-// 获取高德地理天气信息
-export const getWeather = async (key, city) => {
-  const res = await fetch(
-    `https://restapi.amap.com/v3/weather/weatherInfo?key=${key}&city=${city}`
-  );
-  return await res.json();
-};
+  if (location === DEFAULT_LOCATION) {
+    try {
+      const data = await request("/ip", { key });
+      if (data.city && data.adcode) location = { city: data.city, adcode: data.adcode };
+    } catch {
+      // IP 定位不可用时使用默认城市，仍尝试获取天气。
+    }
+  }
 
-// 获取教书先生天气 API
-// https://api.oioweb.cn/doc/weather/GetWeather
-export const getOtherWeather = async () => {
-  const res = await fetch("https://api.oioweb.cn/api/weather/GetWeather");
-  return await res.json();
+  const data = await request("/weather/weatherInfo", { key, city: location.adcode });
+  const weather = data.lives?.[0];
+  if (!weather) throw new Error("天气服务未返回数据");
+  return { adCode: location, weather };
 };

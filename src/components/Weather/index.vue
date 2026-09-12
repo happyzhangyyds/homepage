@@ -14,100 +14,121 @@
       }}&nbsp;
     </span>
     <span class="sm-hidden">{{ weatherData.weather.windpower }}&nbsp;级</span>
+    <span v-if="isCached" class="sm-hidden">（上次缓存）</span>
   </div>
   <div class="weather" v-else>
-    <span>天气数据获取失败</span>
+    <span>{{ errorMessage }}</span>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, h } from "vue";
-import { getAdcode, getWeather, getOtherWeather } from "@/api";
-import { Error } from "@icon-park/vue-next";
+import { onMounted, reactive, ref } from "vue";
+import { getCurrentWeather } from "@/api";
 
-// 高德开发者 Key
 const mainKey = import.meta.env.VITE_WEATHER_KEY;
+const WEATHER_CACHE_KEY = "homepage-weather-cache";
+const WEATHER_CACHE_TTL = 30 * 60 * 1000;
+const errorMessage = ref("正在获取天气数据…");
+const isCached = ref(false);
 
-// 天气数据
 const weatherData = reactive({
-  adCode: {
-    city: null, // 城市
-    adcode: null, // 城市编码
-  },
+  adCode: { city: null, adcode: null },
   weather: {
-    weather: null, // 天气现象
-    temperature: null, // 实时气温
-    winddirection: null, // 风向描述
-    windpower: null, // 风力级别
+    weather: null,
+    temperature: null,
+    winddirection: null,
+    windpower: null,
   },
 });
 
-// 获取天气数据
-const getWeatherData = () => {
-  // 获取地理位置信息
-  if (!mainKey) {
-    getOtherWeather()
-      .then((res) => {
-        console.log(res);
-        const data = res.result;
-        weatherData.adCode = {
-          city: data.city.name,
-          adcode: data.city.cityId,
-        };
-        weatherData.weather = {
-          weather: data.condition.condition,
-          temperature: data.condition.temp,
-          winddirection: data.condition.windDir,
-          windpower: data.condition.windLevel,
-        };
-      })
-      .catch((err) => {
-        console.error("天气信息获取失败:" + err);
-        onError("天气信息获取失败");
-      });
-  } else {
-    getAdcode(mainKey)
-      .then((res) => {
-        weatherData.adCode = {
-          city: res.city,
-          adcode: res.adcode,
-        };
-        // 获取天气信息
-        getWeather(mainKey, weatherData.adCode.adcode)
-          .then((res) => {
-            weatherData.weather = {
-              weather: res.lives[0].weather,
-              temperature: res.lives[0].temperature,
-              winddirection: res.lives[0].winddirection,
-              windpower: res.lives[0].windpower,
-            };
-          })
-          .catch((err) => {
-            console.error("天气信息获取失败:" + err);
-            onError("天气信息获取失败");
-          });
-      })
-      .catch((err) => {
-        console.error("地理位置获取失败:" + err);
-        onError("地理位置获取失败");
-      });
+const applyWeather = (data, cached = false) => {
+  if (!data?.adCode || !data?.weather) return;
+  weatherData.adCode = { ...weatherData.adCode, ...data.adCode };
+  weatherData.weather = { ...weatherData.weather, ...data.weather };
+  isCached.value = cached;
+  if (weatherData.adCode.city && weatherData.weather.weather) {
+    errorMessage.value = "";
   }
 };
 
-// 报错信息
-const onError = (message) => {
-  ElMessage({
-    message,
-    icon: h(Error, {
-      theme: "filled",
-      fill: "#efefef",
-    }),
+const getCachedWeather = () => {
+  try {
+    const raw = localStorage.getItem(WEATHER_CACHE_KEY);
+    if (!raw) return null;
+    const cached = JSON.parse(raw);
+    if (
+      cached?.updatedAt &&
+      Date.now() - cached.updatedAt < WEATHER_CACHE_TTL &&
+      cached?.adCode?.city &&
+      cached?.weather?.weather
+    ) {
+      return cached;
+    }
+    localStorage.removeItem(WEATHER_CACHE_KEY);
+    return null;
+  } catch (error) {
+    console.warn("天气缓存读取失败:", error);
+    return null;
+  }
+};
+
+const restoreCachedWeather = () => {
+  const cached = getCachedWeather();
+  if (cached) applyWeather(cached, true);
+};
+
+const cacheWeather = (data) => {
+  try {
+    localStorage.setItem(
+      WEATHER_CACHE_KEY,
+      JSON.stringify({ ...data, updatedAt: Date.now() })
+    );
+  } catch (error) {
+    console.warn("天气缓存写入失败:", error);
+  }
+};
+
+const getBrowserCoordinates = () =>
+  new Promise((resolve) => {
+    if (!navigator.geolocation) {
+      resolve(null);
+      return;
+    }
+
+    navigator.geolocation.getCurrentPosition(
+      ({ coords }) =>
+        resolve({ latitude: coords.latitude, longitude: coords.longitude }),
+      () => resolve(null),
+      { enableHighAccuracy: false, timeout: 6000, maximumAge: 10 * 60 * 1000 }
+    );
   });
-  console.error(message);
+
+const getWeatherData = async () => {
+  if (!mainKey) {
+    errorMessage.value = "天气服务暂未配置";
+    return;
+  }
+
+  const cached = getCachedWeather();
+  if (cached) {
+    applyWeather(cached, true);
+  }
+
+  try {
+    const coordinates = await getBrowserCoordinates();
+    const data = await getCurrentWeather(mainKey, coordinates);
+    applyWeather(data, false);
+    cacheWeather(data);
+  } catch (error) {
+    if (!cached) {
+      errorMessage.value = error?.message || "天气数据获取失败";
+    }
+    console.warn("天气信息获取失败:", error);
+  }
 };
 
 onMounted(() => {
-  // 调用获取天气
+  restoreCachedWeather();
   getWeatherData();
 });
 </script>

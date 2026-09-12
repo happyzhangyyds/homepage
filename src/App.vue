@@ -1,210 +1,91 @@
 <template>
-  <div class="animate">
-    <Background />
-    <main>
-      <div class="container" v-show="!store.backgroundShow">
-        <section class="main" v-show="!store.setOpenState">
-          <MainLeft />
-          <MainRight v-show="!store.boxOpenState" />
-          <Box v-show="store.boxOpenState" />
-        </section>
-        <section
-          class="more"
-          v-show="store.setOpenState"
-          @click="store.setOpenState = false"
-        >
-          <MoreSet />
-        </section>
-      </div>
-      <!-- 移动端菜单按钮 -->
-      <Icon
-        class="menu"
-        size="24"
-        @click="store.mobileOpenState = !store.mobileOpenState"
-      >
-        <component :is="store.mobileOpenState ? CloseSmall : HamburgerButton" />
-      </Icon>
-    </main>
-    <Footer v-show="!store.backgroundShow && !store.setOpenState" />
-  </div>
+  <main :class="`theme-${currentTime.theme}`">
+    <Background :theme="currentTime.theme" />
+    <section class="content">
+      <Func :current-time="currentTime" />
+      <Link />
+    </section>
+  </main>
 </template>
+
 <script setup>
-import { onMounted, onBeforeUnmount, watch } from "vue";
-import { helloInit, checkDays } from "@/utils/getTime.js";
-import { mainStore } from "@/store";
-import { Icon } from "@vicons/utils";
-import { HamburgerButton, CloseSmall } from "@icon-park/vue-next";
-import MainLeft from "@/views/Main/Left.vue";
-import MainRight from "@/views/Main/Right.vue";
+import Func from "@/views/Func/index.vue";
+import Link from "@/components/Links/index.vue";
 import Background from "@/components/Background/index.vue";
-import Footer from "@/components/Footer/index.vue";
-import Box from "@/views/Box/index.vue";
-import MoreSet from "@/views/MoreSet/index.vue";
-import cursorInit from "@/utils/cursor.js";
-import config from "@/../package.json";
-// 新春灯笼
-// import "@/utils/lantern.js";
+import { useSharedClock } from "@/utils/timeTicker";
 
-const store = mainStore();
-
-// 页面宽度
-const getWidth = () => {
-  store.setInnerWidth(window.innerWidth);
-};
-
-onMounted(() => {
-  // 自定义鼠标
-  cursorInit();
-  // 加载完成事件
-  window.addEventListener("load", () => {
-    console.log("加载完成");
-    // 去除加载标记
-    document.getElementsByTagName("body")[0].className = "";
-    // 给加载动画添加结束标记
-    const loadingBox = document.getElementById("loading-box");
-    loadingBox.classList.add("loaded");
-    // 欢迎提示
-    helloInit();
-    // 默哀模式
-    checkDays();
-  });
-
-  // 屏蔽右键
-  document.oncontextmenu = () => {
-    ElMessage({
-      message: "为了浏览体验，本站禁用右键",
-      grouping: true,
-      duration: 2000,
-    });
-    return false;
-  };
-
-  // 鼠标中键事件
-  window.addEventListener("mousedown", (event) => {
-    if (event.button == 1) {
-      store.backgroundShow = !store.backgroundShow;
-      ElMessage({
-        message: `已${store.backgroundShow ? "开启" : "退出"}壁纸展示状态`,
-        grouping: true,
-      });
-    }
-  });
-
-  // 监听当前页面宽度
-  getWidth();
-  window.addEventListener("resize", getWidth);
-
-  // 控制台输出
-  const styleTitle1 =
-    "font-size: 20px;font-weight: 600;color: rgb(244,167,89);";
-  const styleTitle2 = "font-size:12px;color: rgb(244,167,89);";
-  const styleContent = "color: rgb(30,152,255);";
-  const title1 = "無名の主页";
-  const title2 = `
- _____ __  __  _______     ____     __
-|_   _|  \\/  |/ ____\\ \\   / /\\ \\   / /
-  | | | \\  / | (___  \\ \\_/ /  \\ \\_/ /
-  | | | |\\/| |\\___ \\  \\   /    \\   /
- _| |_| |  | |____) |  | |      | |
-|_____|_|  |_|_____/   |_|      |_|`;
-  const content = `\n\n版本: ${config.version}\n主页: ${config.home}\nGithub: ${config.github}`;
-  console.info(
-    `%c${title1} %c${title2} %c${content}`,
-    styleTitle1,
-    styleTitle2,
-    styleContent
-  );
-});
-
-// 监听宽度变化
-watch(
-  () => store.innerWidth,
-  (value) => {
-    if (value < 990) {
-      store.boxOpenState = false;
-    }
-  }
-);
-
-onBeforeUnmount(() => {
-  window.removeEventListener("resize", getWidth);
-});
+const { currentTime } = useSharedClock();
 </script>
 
 <style lang="scss" scoped>
 main {
-  .container {
-    width: 100%;
-    height: 100vh;
-    margin: 0 auto;
-    @media (max-width: 1200px) {
-      padding: 0 2vw;
-    }
-    .main {
-      width: 100%;
-      height: 100%;
-      padding: 0 0.75rem;
-      display: flex;
-      flex-direction: row;
-      justify-content: center;
-      align-items: center;
-    }
-    .more {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background-color: #00000080;
-      backdrop-filter: blur(20px);
-      z-index: 2;
-      animation: fade;
-      -webkit-animation: fade 0.5s;
-    }
+  position: relative;
+  min-height: 100vh;
+  min-height: 100dvh;
+  padding: clamp(1.25rem, 4vw, 4rem);
+  background: var(--page-background);
+  color: var(--text-color);
+  overflow: hidden;
+  transition: background-color 0.6s ease, color 0.6s ease;
+
+  &.theme-day {
+    --page-background: #d9e2df;
+    --text-color: #25352f;
+    --muted-text: rgb(37 53 47 / 78%);
+    --card-background: linear-gradient(135deg, rgb(255 255 255 / 45%), rgb(241 248 242 / 21%));
+    --card-highlight: rgb(255 255 255 / 54%);
+    --card-shadow: rgb(69 91 79 / 15%);
+    --surface-background: rgb(255 255 255 / 33%);
+    --surface-hover: rgb(255 255 255 / 58%);
+    --surface-border: rgb(70 95 80 / 24%);
+    --focus-ring: rgb(66 105 82 / 31%);
+    --content-glow: rgb(255 255 255 / 32%);
   }
-  .menu {
-    position: fixed;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    top: 84%;
-    left: calc(50% - 28px);
-    width: 56px;
-    height: 34px;
-    background: rgb(0 0 0 / 20%);
-    backdrop-filter: blur(10px);
-    border-radius: 6px;
-    transition: all 0.3s;
-    animation: fade;
-    -webkit-animation: fade 0.5s;
-    &:active {
-      transform: scale(0.95);
-    }
-    .i-icon {
-      transform: translateY(2px);
-    }
-    @media (min-width: 720px) {
-      display: none;
-    }
+
+  &.theme-night {
+    --page-background: #111827;
+    --text-color: #fff;
+    --muted-text: rgb(255 255 255 / 72%);
+    --card-background: linear-gradient(135deg, rgb(14 18 24 / 16%), rgb(14 18 24 / 5%));
+    --card-highlight: rgb(255 255 255 / 12%);
+    --card-shadow: rgb(0 0 0 / 8%);
+    --surface-background: rgb(10 16 22 / 14%);
+    --surface-hover: rgb(12 20 27 / 36%);
+    --surface-border: rgb(255 255 255 / 25%);
+    --focus-ring: rgb(255 255 255 / 25%);
+    --content-glow: rgb(9 14 19 / 22%);
   }
 }
 
-// 加载动画层
-.animate {
-  transform: scale(1);
-  transition: all ease 1.25s;
-  opacity: 1;
-  filter: blur(0);
-  width: 100%;
-  height: 100%;
+.content {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 440px);
+  margin-left: auto;
+  padding: clamp(0.35rem, 1.5vw, 0.85rem);
+
+  &::before {
+    position: absolute;
+    z-index: -1;
+    inset: -2rem -2.5rem;
+    background: radial-gradient(ellipse at center, var(--content-glow), transparent 68%);
+    content: "";
+    filter: blur(12px);
+    pointer-events: none;
+  }
 }
 
-.loading {
-  .animate {
-    transform: scale(1.2);
-    transition: all ease 1.25s;
-    opacity: 0;
-    filter: blur(10px);
+@media (max-width: 520px) {
+  main {
+    display: grid;
+    place-items: center;
+    padding: 1rem;
+  }
+
+  .content {
+    width: min(100%, 620px);
+    margin-left: 0;
+    padding: 0;
   }
 }
 </style>
