@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# Local environment configuration (never commit credentials)
+.env
+.env.*
+!.env.example
