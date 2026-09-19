@@ -1,36 +1,53 @@
 <template>
   <div class="cover" :class="`theme-${theme}`" aria-hidden="true">
-    <img class="image" :src="imageUrl" alt="" />
+    <picture>
+      <source media="(max-width: 767px)" :srcset="mobileImageUrl" type="image/webp" />
+      <img class="image" :src="imageUrl" alt="" />
+    </picture>
     <div class="shade" />
   </div>
 </template>
 
 <script setup>
-import { ref, watch } from "vue";
+import { computed, onBeforeUnmount, onMounted, ref } from "vue";
+import { getSixLightsPhase } from "@/utils/solarSchedule";
 
 const props = defineProps({
   theme: { type: String, default: "day" },
 });
 
-const backgrounds = {
-  day: ["/images/background2.png", "/images/background5.png"],
-  night: ["/images/background1.png"],
-};
-const imageUrl = ref("");
+const phase = ref(getSixLightsPhase());
+const imageUrl = computed(() => `/images/six-lights/wanxi-${phase.value}.webp`);
+const mobileImageUrl = computed(() => `/images/six-lights/wanxi-${phase.value}-sm.webp`);
+let timer;
 
-watch(
-  () => props.theme,
-  (theme) => {
-    const options = backgrounds[theme] || backgrounds.day;
-    imageUrl.value = options[Math.floor(Math.random() * options.length)];
-  },
-  { immediate: true }
-);
+const updatePhase = () => {
+  phase.value = getSixLightsPhase();
+};
+
+const preloadNextImage = () => {
+  const next = phase.value === 6 ? 1 : phase.value + 1;
+  const image = new Image();
+  image.src = `/images/six-lights/wanxi-${next}.webp`;
+};
+
+onMounted(() => {
+  updatePhase();
+  preloadNextImage();
+  timer = window.setInterval(() => {
+    const previous = phase.value;
+    updatePhase();
+    if (phase.value !== previous) preloadNextImage();
+  }, 60_000);
+});
+
+onBeforeUnmount(() => window.clearInterval(timer));
 </script>
 
 <style lang="scss" scoped>
 .cover,
 .image,
+.cover picture,
 .shade {
   position: absolute;
   inset: 0;
@@ -43,6 +60,7 @@ watch(
 }
 
 .image {
+  display: block;
   object-fit: cover;
   transform: scale(1.015);
   transition: opacity 0.6s ease;
