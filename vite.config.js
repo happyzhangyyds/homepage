@@ -24,7 +24,10 @@ export default ({ mode }) => {
         },
       }),
     ],
-    server: { port: 3000, hmr: true },
+    server: {
+      port: 3000,
+      hmr: true,
+    },
     resolve: {
       alias: { "@": resolve(__dirname, "src") },
     },

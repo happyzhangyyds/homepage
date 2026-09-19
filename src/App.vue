@@ -1,6 +1,9 @@
 <template>
   <main :class="`theme-${currentTime.theme}`">
     <Background :theme="currentTime.theme" />
+    <section class="workspace">
+      <WorkdayPanel :current-time="currentTime" />
+    </section>
     <section class="content">
       <Func :current-time="currentTime" />
       <Link />
@@ -12,6 +15,7 @@
 import Func from "@/views/Func/index.vue";
 import Link from "@/components/Links/index.vue";
 import Background from "@/components/Background/index.vue";
+import WorkdayPanel from "@/components/WorkdayPanel/index.vue";
 import { useSharedClock } from "@/utils/timeTicker";
 
 const { currentTime } = useSharedClock();
@@ -20,9 +24,14 @@ const { currentTime } = useSharedClock();
 <style lang="scss" scoped>
 main {
   position: relative;
-  min-height: 100vh;
-  min-height: 100dvh;
-  padding: clamp(1.25rem, 4vw, 4rem);
+  display: grid;
+  grid-template-columns: minmax(720px, 900px) minmax(320px, 440px);
+  align-items: stretch;
+  justify-content: space-between;
+  gap: clamp(1rem, 4vw, 5rem);
+  height: 100vh;
+  height: 100dvh;
+  padding: clamp(1rem, 3.5vh, 3rem) clamp(1.25rem, 4vw, 4rem);
   background: var(--page-background);
   color: var(--text-color);
   overflow: hidden;
@@ -60,7 +69,7 @@ main {
 .content {
   position: relative;
   z-index: 1;
-  width: min(100%, 440px);
+  width: 100%;
   margin-left: auto;
   padding: clamp(0.35rem, 1.5vw, 0.85rem);
 
@@ -75,13 +84,23 @@ main {
   }
 }
 
-@media (max-width: 520px) {
+.workspace {
+  position: relative;
+  z-index: 1;
+  width: 100%;
+  min-height: 0;
+  padding: clamp(0.35rem, 1.5vw, 0.85rem);
+}
+
+@media (max-width: 900px) {
   main {
     display: grid;
-    place-items: center;
+    gap: 1rem;
     padding: 1rem;
+    overflow: hidden;
   }
 
+  .workspace,
   .content {
     width: min(100%, 620px);
     margin-left: 0;
