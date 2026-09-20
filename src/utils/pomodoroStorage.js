@@ -1,10 +1,10 @@
 const STORAGE_KEY = "homepage:pomodoro-data:v1";
-const VERSION = 1;
+const VERSION = 2;
 
 export const createEmptyPomodoroData = () => ({
   version: VERSION,
   updatedAt: null,
-  settings: { workdayStart: "06:30", defaultCountdownMinutes: 25 },
+  settings: { workdayStart: "08:30", defaultCountdownMinutes: 25 },
   tasks: [],
   scheduleBlocks: [],
   focusSessions: [],
@@ -22,12 +22,30 @@ export const isValidPomodoroData = (value) =>
   Array.isArray(value.focusSessions) &&
   (value.activeTimer === null || isObject(value.activeTimer));
 
+const migratePomodoroData = (value) => {
+  if (!isObject(value)) return null;
+  if (value.version === VERSION) return value;
+  if (value.version !== 1 || !Array.isArray(value.tasks) || !Array.isArray(value.scheduleBlocks) || !Array.isArray(value.focusSessions)) return null;
+
+  const timerTaskId = value.activeTimer?.taskId;
+  const scheduledTaskIds = new Set(value.scheduleBlocks.filter((block) => block.status !== "cancelled").map((block) => block.taskId));
+  return {
+    ...value,
+    version: VERSION,
+    tasks: value.tasks.map((task) => ({
+      ...task,
+      status: task.status === "active" ? (task.id === timerTaskId ? "active" : (scheduledTaskIds.has(task.id) ? "planned" : "inbox")) : task.status,
+    })),
+    scheduleBlocks: value.scheduleBlocks.map((block) => ({ ...block, status: block.status || "planned" })),
+  };
+};
+
 export const readPomodoroData = () => {
   const raw = window.localStorage.getItem(STORAGE_KEY);
   if (!raw) return createEmptyPomodoroData();
   try {
-    const parsed = JSON.parse(raw);
-    return isValidPomodoroData(parsed) ? parsed : createEmptyPomodoroData();
+    const parsed = migratePomodoroData(JSON.parse(raw));
+    return parsed && isValidPomodoroData(parsed) ? parsed : createEmptyPomodoroData();
   } catch {
     return createEmptyPomodoroData();
   }
@@ -43,8 +61,8 @@ export const writePomodoroData = (data) => {
 export const removePomodoroData = () => window.localStorage.removeItem(STORAGE_KEY);
 
 export const parseImportedPomodoroData = (text) => {
-  const parsed = JSON.parse(text);
-  if (!isValidPomodoroData(parsed)) throw new Error("文件不是可导入的番茄钟数据备份");
+  const parsed = migratePomodoroData(JSON.parse(text));
+  if (!parsed || !isValidPomodoroData(parsed)) throw new Error("文件不是可导入的番茄钟数据备份");
   return parsed;
 };
 

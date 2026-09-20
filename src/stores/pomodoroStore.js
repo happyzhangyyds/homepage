@@ -7,6 +7,7 @@ import {
   removePomodoroData,
   writePomodoroData,
 } from "@/utils/pomodoroStorage";
+import { completeTask as completeWorkdayTask, deleteTask as deleteWorkdayTask, moveTask as moveWorkdayTask, resolveFocusOutcome, startFocus } from "@/domain/workdayState";
 
 const state = ref(null);
 const currentMoment = ref(new Date());
@@ -14,7 +15,7 @@ const id = () => globalThis.crypto?.randomUUID?.() || `${Date.now()}-${Math.rand
 const clone = (value) => JSON.parse(JSON.stringify(value));
 const minutesBetween = (start, end) => Math.max(0, Math.round((new Date(end) - new Date(start)) / 60000));
 
-const workdayKeyFor = (date, start = "06:30") => {
+const workdayKeyFor = (date, start = "08:30") => {
   const current = new Date(date);
   const [hour, minute] = start.split(":").map(Number);
   if (current.getHours() < hour || (current.getHours() === hour && current.getMinutes() < minute)) current.setDate(current.getDate() - 1);
@@ -30,21 +31,29 @@ export const usePomodoroStore = () => {
 
   const currentWorkday = computed(() => workdayKeyFor(currentMoment.value, state.value.settings.workdayStart));
   const activeTask = computed(() => state.value.tasks.find((task) => task.id === state.value.activeTimer?.taskId) || null);
+  const currentTask = computed(() => state.value.tasks.find((task) => task.status === "active") || null);
 
   const addTask = ({ title, quadrant = "important", estimatePomodoros = 1 }) => {
     const cleanTitle = title.trim();
     if (!cleanTitle) throw new Error("请输入任务名称");
-    const task = { id: id(), title: cleanTitle, quadrant, estimatePomodoros: Number(estimatePomodoros) || 1, status: "active", createdAt: new Date().toISOString() };
+    const task = { id: id(), title: cleanTitle, quadrant, estimatePomodoros: Number(estimatePomodoros) || 1, status: "inbox", createdAt: new Date().toISOString() };
     state.value.tasks.unshift(task);
     persist();
     return task;
   };
 
   const completeTask = (taskId) => {
-    const task = state.value.tasks.find((item) => item.id === taskId);
-    if (!task) return;
-    task.status = task.status === "completed" ? "active" : "completed";
-    task.completedAt = task.status === "completed" ? new Date().toISOString() : null;
+    state.value = completeWorkdayTask(state.value, taskId);
+    persist();
+  };
+
+  const deleteTask = (taskId) => {
+    state.value = deleteWorkdayTask(state.value, taskId);
+    persist();
+  };
+
+  const moveTask = (taskId, targetTaskId) => {
+    state.value = moveWorkdayTask(state.value, taskId, targetTaskId);
     persist();
   };
 
@@ -58,6 +67,9 @@ export const usePomodoroStore = () => {
   const addScheduleBlock = ({ taskId, startTime, durationMinutes }) => {
     const duration = Number(durationMinutes);
     if (!taskId || !/^\d{2}:\d{2}$/.test(startTime) || !Number.isFinite(duration) || duration < 5) throw new Error("请填写有效的计划时间和时长");
+    const task = state.value.tasks.find((item) => item.id === taskId);
+    if (!task || ["completed", "archived", "waiting"].includes(task.status)) throw new Error("请选择可安排的任务");
+    if (task.status !== "active") task.status = "planned";
     const block = { id: id(), taskId, workday: currentWorkday.value, startTime, durationMinutes: duration, status: "planned", createdAt: new Date().toISOString() };
     state.value.scheduleBlocks.push(block);
     persist();
@@ -71,7 +83,10 @@ export const usePomodoroStore = () => {
 
   const startTimer = ({ taskId, mode, durationMinutes }) => {
     if (!taskId || !["countdown", "stopwatch"].includes(mode)) throw new Error("请选择任务和计时模式");
-    if (state.value.activeTimer?.status === "running") throw new Error("请先结束正在进行的专注");
+    const task = state.value.tasks.find((item) => item.id === taskId);
+    if (!task || !["planned", "active"].includes(task.status)) throw new Error("请先将任务安排到今日计划，再开始专注");
+    if (state.value.activeTimer) throw new Error("请先结束正在进行的专注");
+    state.value = startFocus(state.value, taskId);
     const startedAt = new Date().toISOString();
     state.value.activeTimer = { taskId, mode, status: "running", startedAt, initialStartedAt: startedAt, elapsedBeforePause: 0, plannedSeconds: mode === "countdown" ? Number(durationMinutes) * 60 : null };
     persist();
@@ -97,10 +112,21 @@ export const usePomodoroStore = () => {
     const timer = state.value.activeTimer;
     if (!timer) return;
     const endedAt = new Date().toISOString();
-    const actualSeconds = timer.elapsedBeforePause + (timer.status === "running" ? Math.max(0, Math.floor((Date.now() - new Date(timer.startedAt).getTime()) / 1000)) : 0);
+    const measuredSeconds = timer.elapsedBeforePause + (timer.status === "running" ? Math.max(0, Math.floor((Date.now() - new Date(timer.startedAt).getTime()) / 1000)) : 0);
+    const actualSeconds = timer.mode === "countdown" && timer.plannedSeconds ? Math.min(measuredSeconds, timer.plannedSeconds) : measuredSeconds;
     state.value.focusSessions.push({ id: id(), taskId: timer.taskId, mode: timer.mode, plannedSeconds: timer.plannedSeconds, startedAt: timer.initialStartedAt || timer.startedAt, endedAt, actualSeconds, status, workday: currentWorkday.value });
     state.value.activeTimer = null;
     persist();
+  };
+
+  const settleTimer = (action) => {
+    const timer = state.value.activeTimer;
+    if (!timer) return;
+    const taskId = timer.taskId;
+    stopTimer("completed");
+    state.value = resolveFocusOutcome(state.value, taskId, action);
+    persist();
+    if (action === "continue") startTimer({ taskId, mode: "countdown", durationMinutes: 25 });
   };
 
   const discardTimer = () => {
@@ -130,5 +156,5 @@ export const usePomodoroStore = () => {
   const clearAllData = () => { removePomodoroData(); state.value = createEmptyPomodoroData(); };
   const refreshWorkday = () => { currentMoment.value = new Date(); };
 
-  return { state, currentWorkday, activeTask, todaySessions, todayStats, addTask, completeTask, archiveTask, addScheduleBlock, removeScheduleBlock, startTimer, pauseTimer, resumeTimer, stopTimer, discardTimer, getElapsedSeconds, exportData, importData, clearAllData, refreshWorkday, minutesBetween };
+  return { state, currentWorkday, activeTask, currentTask, todaySessions, todayStats, addTask, completeTask, deleteTask, moveTask, archiveTask, addScheduleBlock, removeScheduleBlock, startTimer, pauseTimer, resumeTimer, stopTimer, settleTimer, discardTimer, getElapsedSeconds, exportData, importData, clearAllData, refreshWorkday, minutesBetween };
 };
