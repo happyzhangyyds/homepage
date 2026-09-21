@@ -2,7 +2,7 @@
   <main :class="`theme-${currentTime.theme}`">
     <Background :theme="currentTime.theme" />
     <section class="workspace">
-      <WorkdayPanel :current-time="currentTime" />
+      <WorkdayPanel :current-time="currentTime" :theme="currentTime.theme" />
     </section>
     <section class="content">
       <Func :current-time="currentTime" />
